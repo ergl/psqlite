@@ -32,6 +32,21 @@ use @sqlite3_column_text[Pointer[U8] ref](stmt: Pointer[_Stmt] tag, idx: USize)
 use @sqlite3_column_bytes[USize](stmt: Pointer[_Stmt] tag, idx: USize)
 use @sqlite3_column_type[U32](stmt: Pointer[_Stmt] tag, idx: USize)
 
+// TODO(borja): Include the callback, but figure out how to allow nullable cbs
+use @sqlite3_exec[U32](
+  handle: Pointer[_ConnHandle] tag,
+  stmt: Pointer[U8] tag,
+  callback: Pointer[U8] tag,
+  arg: Pointer[U8] tag,
+  errmsg: Pointer[U8] tag
+)
+
+// TODO(borja): Allow users to pass lambdas
+// Since bare lambdas can't capture, we should pass the connection as the first
+// argument, and then call a user-defined lambda from there.
+type _ExecCallback is @{(Pointer[U8] tag, I32, Pointer[Pointer[U8]], Pointer[Pointer[U8]]): I32}
+
+
 struct iso _ConnHandle
   new iso create() => None
 
@@ -64,6 +79,18 @@ class iso Connection
       Debug.err(" sqlite3_prepare_v3: " + ret.string())
       error
     end
+
+  fun exec(sql: String)? =>
+    let null = recover tag Pointer[U8].create() end
+    let ret = @sqlite3_exec(
+      _handle,
+      sql.cpointer(),
+      null,
+      null,
+      null
+    )
+
+    if ret != SqliteError.ok() then error end
 
   fun close_stmt(stmt: Statement iso) =>
     stmt._close()
