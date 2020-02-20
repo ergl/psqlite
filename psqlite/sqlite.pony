@@ -17,12 +17,12 @@ use @sqlite3_column_count[U32](stmt: Pointer[_Stmt] tag)
 use @sqlite3_step[U32](stmt: Pointer[_Stmt] tag)
 use @sqlite3_finalize[U32](stmt: Pointer[_Stmt] tag)
 
-use @sqlite3_bind_blob[U32](stmt: Pointer[_Stmt] tag, idx: USize, data: Pointer[U8]tag, size: USize, dest: Pointer[U8] tag)
+use @sqlite3_bind_blob[U32](stmt: Pointer[_Stmt] tag, idx: USize, data: Pointer[U8]tag, size: USize, dest: @{()})
 use @sqlite3_bind_double[U32](stmt: Pointer[_Stmt] tag, idx: USize, double: F64)
 use @sqlite3_bind_int[U32](stmt: Pointer[_Stmt] tag, idx: USize, int: I32)
 use @sqlite3_bind_int64[U32](stmt: Pointer[_Stmt] tag, idx: USize, int: I64)
 use @sqlite3_bind_null[U32](stmt: Pointer[_Stmt] tag, idx: USize)
-use @sqlite3_bind_text[U32](stmt: Pointer[_Stmt] tag, idx: USize, data: Pointer[U8]tag, size: USize, dest: Pointer[U8] tag)
+use @sqlite3_bind_text[U32](stmt: Pointer[_Stmt] tag, idx: USize, data: Pointer[U8]tag, size: USize, dest: @{()})
 
 use @sqlite3_column_blob[Pointer[U8] ref](stmt: Pointer[_Stmt] tag, idx: USize)
 use @sqlite3_column_double[F64](stmt: Pointer[_Stmt] tag, idx: USize)
@@ -81,6 +81,10 @@ primitive SqNull
 type ColumnType is (SqInteger | SqInteger64 | SqFloat | SqText | SqBlob | SqNull)
 class iso Statement
   let _stmt: Pointer[_Stmt] tag
+  // SQLite allows to pass a destructor to bind_{text,blob}, or special values
+  // SQLITE_STATIC (0) or SQLITE_TRANSIENT (-1). Since it's hard to fool the compiler
+  // and allow either a function or an I8, we craft a dummy destructor that does nothing
+  let _dummy_destructor: @{()} = @{() => None}
 
   new iso _create(stmt: Pointer[_Stmt] tag) =>
     _stmt = stmt
@@ -89,10 +93,9 @@ class iso Statement
     @sqlite3_column_count(_stmt)
 
   fun bind(column: USize, value: (String | Array[U8] val | I32 | I64 | F64 | None)) =>
-    var static: U8 = 0
     match value
-    | let s: String => @sqlite3_bind_text(_stmt, column, s.cpointer(), s.size(), addressof static)
-    | let a: Array[U8] val => @sqlite3_bind_blob(_stmt, column, a.cpointer(), a.size(), addressof static)
+    | let s: String => @sqlite3_bind_text(_stmt, column, s.cpointer(), s.size(), _dummy_destructor)
+    | let a: Array[U8] val => @sqlite3_bind_blob(_stmt, column, a.cpointer(), a.size(), _dummy_destructor)
     | let i: I32 => @sqlite3_bind_int(_stmt, column, i)
     | let i64: I64 => @sqlite3_bind_int64(_stmt, column, i64)
     | let f: F64 => @sqlite3_bind_double(_stmt, column, f)
